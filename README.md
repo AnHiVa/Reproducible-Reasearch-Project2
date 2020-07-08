@@ -1,4 +1,4 @@
-# Reproducible Reasearch Project 2
+# Reproducible Research Project 2
 Coursera Reproducible Research project 2
 
 ## Assignment
