@@ -1,0 +1,211 @@
+---
+title: "Dangerous and destructive weather events from 1950 to 2011"
+author: "AnHiVa"
+date: "8/7/2020"
+output: html_document
+---
+# Synopsis
+
+This project involves exploring the U.S. National Oceanic and Atmospheric Administration's (NOAA) storm database. The events in the database start in the year 1950 and end in November 2011. The data has been summarized to present the most dangerous (based on injuries and fatalities) and expensive (based on property and crop damage) weather effects. Tornadoes account for the majority of injuries and fatalities (91346 injuries and 5633 fatalities) while floods have provoked more damage and economic impact ($150 Billion dollars).
+
+# Data Processing
+
+The data has been downloaded from a website. The downloaded date and time, as well as the time zone have been recorded. 
+
+```{r message=FALSE}
+library(tidyverse)
+filename <- "FStormData.csv.bz2"
+
+## File download from source 
+if (!file.exists(filename)){
+  
+  download.file("https://d396qusza40orc.cloudfront.net/repdata%2Fdata%2FStormData.csv.bz2",filename, method = "curl")
+  filedownloadtime <- paste(file.info(filename)$ctime, Sys.timezone(), sep = " ")
+  print(paste("The FStormData file was downloaded:", filedownloadtime,sep = " "))
+
+} else {
+  
+  filedownloadtime <- paste(file.info(filename)$ctime, Sys.timezone(), sep = " ")
+  print(paste("The FStormData file was downloaded:", filedownloadtime, sep = " "))
+
+}
+
+```
+
+The data is read into r using the `read_csv` function, specific columns have been selected and parsed.
+
+### Variables selected
+- **EVTYPE**: Weather event name.
+- **FATALITIES**: Number of deaths due to a certain weather event.
+- **INJURIES**: Number of injuries due to a certain weather event.
+- **PROPDMG**: Property damage in USD.
+- **PROPDMGEXP**: Exponential factor of the property damage (e.g. PROPDMG * 10^EXP)
+- **CROPDMG**: Crop damage in USD.
+- **CROPDMGEXP**: Exponential factor of the crop damage (e.g. CROPDMG * 10^EXP)
+
+```{r message=FALSE, cache=TRUE}
+StormData <- read_csv(filename, 
+                       col_types = cols_only(
+                         EVTYPE = col_character(),
+                         FATALITIES = col_double(),
+                         INJURIES = col_double(),
+                         PROPDMG = col_double(),
+                         PROPDMGEXP = col_character(),
+                         CROPDMG = col_double(),
+                         CROPDMGEXP = col_character()
+                         ))
+str(StormData)
+```
+
+The data is subset and saved in a new variable called `health`. It is grouped by weather type and summarized  by Total of Fatalities and Injuries. 
+
+```{r message=FALSE}
+health <- StormData %>%
+  group_by(EVTYPE) %>%
+  summarise(Totalfatalities = sum(FATALITIES, na.rm = TRUE), Totalinjuries = sum(INJURIES, na.rm = TRUE))
+
+head(health)
+```
+
+### Fatalities Processing
+The data is filtered to the top 10 weather events with most fatalities and  arranged in descendant order. The data is stored in a variable called `fatalitiesfiltered`
+
+```{r}
+fatalitiesfiltered <- health %>%
+  select(-Totalinjuries) %>%
+  slice_max(Totalfatalities ,n = 10) %>%
+  arrange(desc(Totalfatalities)) %>%
+  mutate(EVTYPE = factor(EVTYPE, levels = EVTYPE))
+```
+
+A plot is created to highlight results later on. The plot is stored in a variable called `fatalitiesplot`
+
+```{r}
+fatalitiesplot <- ggplot(fatalitiesfiltered, aes(x = EVTYPE, y = Totalfatalities)) +
+  geom_bar(stat = "identity", fill = "darkred", color = "black")+
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  xlab("") +
+  ylab("Fatalities") +
+  labs(title = "Top 10 weather events by fatalities")
+```
+
+### Injuries Processing
+The data is filtered to the top 10 weather events with most injuries and  arranged in descendant order. The data is stored in a variable called `injuredfiltered`
+
+```{r}
+injuriesfiltered <- health %>%
+  select(-Totalfatalities) %>%
+  slice_max(Totalinjuries, n = 10) %>%
+  arrange(desc(Totalinjuries)) %>%
+  mutate(EVTYPE = factor(EVTYPE, levels = EVTYPE))
+```
+
+A plot is created to highlight results later on. The plot is stored in a variable called `injuriesplot`
+
+```{r}
+injuriesplot <- ggplot(injuriesfiltered, aes(x = EVTYPE, y = Totalinjuries)) +
+  geom_bar(stat = "identity", fill = "darkred", color = "black") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  xlab("") +
+  ylab("Injuries") +
+  labs(title = "Top 10 weather events by injuries")
+```
+
+### Economic impact processing (damages)
+The variables related to damage data are selected. There are some inconsistencies and garbage data stored in both `EXP` variables. 
+```{r}
+economic <- StormData %>%
+  select(EVTYPE,PROPDMG, PROPDMGEXP, CROPDMG, CROPDMGEXP)
+## PROPDMGEXP Data
+unique(economic$PROPDMGEXP)
+## CROPDMGEXP Data
+unique(economic$CROPDMGEXP)
+```
+
+Therefore the data needs to be cleaned. For this task, the function `str_replace_all` was used for both variables. After replacing the string values, the variables were parsed to become double variables instead of character variables.
+
+```{r}
+## Replaces text abbreviation to exponent number
+economic$PROPDMGEXP <- str_replace_all(string = economic$PROPDMGEXP,
+                  pattern = c('B' = "9",
+                              'M' = "6",
+                              'K' = "3",
+                              'k' = "3",
+                              'H' = "2",
+                              'h' = "2",
+                              'm' = "0",
+                              '\\+' = "0",
+                              '\\?' = "0",
+                              '-' = "0"
+                              )) %>%
+  parse_double()
+
+economic$CROPDMGEXP <- str_replace_all(string = economic$CROPDMGEXP,
+                  pattern = c('B' = "9",
+                              'M' = "6",
+                              'K' = "3",
+                              'k' = "3",
+                              'H' = "2",
+                              'h' = "2",
+                              'm' = "0",
+                              '\\+' = "0",
+                              '\\?' = "0",
+                              '-' = "0"
+                              )) %>%
+  parse_double()
+
+head(economic)
+```
+
+The data was then grouped by weather event and summarized by the sum of damages after being powered by the value in the corresponding `EXP` variable. The result was divided by 10^9 to represent the final values in Billions of USD. 
+The top 10 values where filtered. 
+
+```{r message=FALSE}
+Totaleconomic <- economic %>%
+  group_by(EVTYPE) %>%
+  summarise(Totaldamage = sum((PROPDMG * 10^(PROPDMGEXP)),(CROPDMG * 10^(CROPDMGEXP)), na.rm = TRUE)/(10^9)) %>%
+  slice_max(Totaldamage, n = 10) %>%
+  arrange(desc(Totaldamage)) %>%
+  mutate(EVTYPE = factor(EVTYPE, levels = EVTYPE))
+```
+
+A plot is created to highlight results later on. The plot is stored in a variable called `Economicplot`
+
+```{r}
+Economicplot <- ggplot(Totaleconomic, aes(x = EVTYPE, y = Totaldamage)) +
+  geom_bar(stat = "identity", fill = "darkred") +
+  theme(axis.text.x = element_text(angle = 90, hjust = 1)) +
+  xlab("") +
+  ylab("Billion USD") +
+  labs(title = "Top 10 weather events by total damages (Properties and Crops)")
+```
+
+# Results
+
+## 1. Across the United States, which types of events (as indicated in the EVTYPE variable) are most harmful with respect to population health?
+
+### Injuries results
+```{r}
+injuriesfiltered
+injuriesplot
+```
+
+The weather event which causes most injuries based on the data are Tornadoes, accounting 91346 injuries, followed by TSTM Wind (6957 injuries) and FLOODS (6789 injuries).
+
+### Fatalities results
+```{r}
+fatalitiesfiltered
+fatalitiesplot
+```
+The weather events which causes most fatalities based on the data are Tornadoes, accounting 5633 fatalities, followed by Excessive Heat (1903 fatalities) and Flash Floods (978).
+
+In conclusion, Tornadoes are the most dangerous weather events based on the data. 
+
+## 2. Across the United States, which types of events have the greatest economic consequences?
+```{r}
+Totaleconomic
+Economicplot
+```
+
+The weather event with most economic impact in the US are Floods, with a \$150.32 Billion USD in expenses due to property and crop damage. Followed by Hurricane/Typhoon (\$71.91 Billion USD) and Tornadoes (\$57.35 Billion USD).
+
